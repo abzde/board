@@ -1,15 +1,24 @@
 var BoardClient = (function($) {
     var socket = io.connect()
       , board = {}
-      , board_elem;
+      , board_elem
+      , status_elem;
 
     socket.on('board', function(rcv_board) {
-        BoardClient.updateBoard(rcv_board);
+        updateBoard(rcv_board);
+        board.connected = rcv_board.connected;
+        status_elem.html('connected: ' + board.connected);
     }).on('lock', function(id) {
         board[id].addClass('locked');
         resetItem(board[id]);
     }).on('update', function(data) {
         updateItem(data);
+    }).on('plusone', function() { 
+        board.connected++;
+        status_elem.html('connected: ' + board.connected);
+    }).on('minusone', function() {
+        board.connected--;
+        status_elem.html('connected: ' + board.connected);
     });
    
     function resetItem(item) { 
@@ -45,6 +54,10 @@ var BoardClient = (function($) {
     }
 
     function init() {
+        status_elem = $("<div></div>")
+                       .attr('id', 'status')
+                       .appendTo(document.body);
+
         board_elem = $("<div></div>")
                       .attr('id', 'board')
                       .appendTo(document.body);
@@ -52,9 +65,9 @@ var BoardClient = (function($) {
 
     function updateItem(data) {
         console.log(data.lock?'locked':'')
-        if (!(data.id in board)) {
-            board[data.id] = $("<div></div>")
-                              .attr('id', data.id)
+        if (!(data._id in board)) {
+            board[data._id] = $("<div></div>")
+                              .attr('id', data._id)
                               .addClass('item')
                               .appendTo(board_elem)
                               .draggable({containment: 'parent',
@@ -63,12 +76,12 @@ var BoardClient = (function($) {
                                           drag: dragX,
                                           stop: stopDrag})
         }
-        board[data.id].css({top: data.y, left: data.x})
+        board[data._id].css({top: data.y, left: data.x})
                       .html(data.text)
         if (data.lock) {
-            board[data.id].addClass('locked');
+            board[data._id].addClass('locked');
         } else {
-            board[data.id].removeClass('locked');
+            board[data._id].removeClass('locked');
         }
 
     }
@@ -77,19 +90,20 @@ var BoardClient = (function($) {
         board_elem.width(data.width);
         board_elem.height(data.height);
         for (item in data.items) {
-            if (data.items.hasOwnProperty(item)) {
+            if (data.items.hasOwnProperty(item)) { 
                 updateItem(data.items[item]);
             }
         }
     }
 
-    $(document).ready(function() {
-        init();
-    });
 
     return {
-        updateBoard: updateBoard,
+        init: init,
+        socket: socket
     }
 })(jQuery);
 
+$(document).ready(function() {
+    BoardClient.init();
+});
 

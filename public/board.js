@@ -4,23 +4,26 @@ var BoardClient = (function($) {
       , board_elem
       , status_elem;
 
-    socket.on('board', function(rcv_board) {
-        updateBoard(rcv_board);
-        board.connected = rcv_board.connected;
-        status_elem.html('connected: ' + board.connected);
-    }).on('lock', function(id) {
+    socket.on('lock', function(id) {
+        console.log(board)
         board[id].addClass('locked');
         resetItem(board[id]);
     }).on('update', function(data) {
         updateItem(data);
-    }).on('plusone', function() { 
+    });
+/*    .on('plusone', function() { 
         board.connected++;
         status_elem.html('connected: ' + board.connected);
     }).on('minusone', function() {
         board.connected--;
         status_elem.html('connected: ' + board.connected);
-    });
-   
+    });*/
+  
+    function addItem(item) {
+        console.log(board);
+        socket.emit('add', { board: board._id, item: item }, updateItem);
+    }
+
     function resetItem(item) { 
         item.draggable('option', 'revert', true)
             .trigger('mouseup')
@@ -41,14 +44,15 @@ var BoardClient = (function($) {
     function stopDrag() {
         console.log('stopdrag');
         elem = this;
-        position = board[this.id].position();
+        position = $(this).position();
         console.log(position);
-        socket.emit('move', this.id, position.left, position.top, function(ret) {
-            if(ret == true) { 
-                $(elem).removeClass('active');
+        $(this).removeClass('active');
+        socket.emit('move', { id: this.id, x: position.left, y: position.top }, function(ret) {
+            if(ret) {
+                updateItem(ret);
             } else {
                 console.log('resetting' + ret);
-                $(elem).css({top: ret.y, left: ret.x });
+                updateItem(ret);
             }
         });
     }
@@ -61,10 +65,23 @@ var BoardClient = (function($) {
         board_elem = $("<div></div>")
                       .attr('id', 'board')
                       .appendTo(document.body);
+
+        if (window.location.hash) {
+            board = window.location.hash;
+            board = board.substr(1, board.length-1);
+            console.log('joining boad ' + board);
+            socket.emit('join', 
+                    board,
+                    updateBoard);
+        } else {
+            console.log('making board');
+            socket.emit('mkboard', updateBoard);
+        }
     }
 
     function updateItem(data) {
-        console.log(data.lock?'locked':'')
+        if (!data) return;
+        console.log(data);
         if (!(data._id in board)) {
             board[data._id] = $("<div></div>")
                               .attr('id', data._id)
@@ -87,19 +104,24 @@ var BoardClient = (function($) {
     }
 
     function updateBoard(data) {
+        if (!data) return;
+        
+        board = data;
+        window.location.hash = "#" + data._id;
+        
         board_elem.width(data.width);
         board_elem.height(data.height);
-        for (item in data.items) {
-            if (data.items.hasOwnProperty(item)) { 
-                updateItem(data.items[item]);
-            }
+        console.log(data.items);
+        for (i = 0; i < data.items.length; i++) {
+            updateItem(data.items[i]);
         }
     }
 
 
     return {
         init: init,
-        socket: socket
+        socket: socket,
+        addItem: addItem
     }
 })(jQuery);
 

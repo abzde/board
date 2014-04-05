@@ -1,13 +1,13 @@
 var BoardClient = (function($) {
     var socket = io.connect()
       , board = {}
+      , items = {}
       , board_elem
       , status_elem;
 
     socket.on('lock', function(id) {
-        console.log(board)
-        board[id].addClass('locked');
-        resetItem(board[id]);
+        items[id].addClass('locked');
+        resetItem(items[id]);
     }).on('update', function(data) {
         updateItem(data);
     });
@@ -20,7 +20,6 @@ var BoardClient = (function($) {
     });*/
   
     function addItem(item) {
-        console.log(board);
         socket.emit('add', { board: board._id, item: item }, updateItem);
     }
 
@@ -42,16 +41,13 @@ var BoardClient = (function($) {
     }
     function dragX() {}
     function stopDrag() {
-        console.log('stopdrag');
         elem = this;
         position = $(this).position();
-        console.log(position);
         $(this).removeClass('active');
         socket.emit('move', { id: this.id, x: position.left, y: position.top }, function(ret) {
             if(ret) {
                 updateItem(ret);
             } else {
-                console.log('resetting' + ret);
                 updateItem(ret);
             }
         });
@@ -69,12 +65,10 @@ var BoardClient = (function($) {
         if (window.location.hash) {
             board = window.location.hash;
             board = board.substr(1, board.length-1);
-            console.log('joining boad ' + board);
             socket.emit('join', 
                     board,
                     updateBoard);
         } else {
-            console.log('making board');
             socket.emit('mkboard', updateBoard);
         }
     }
@@ -82,8 +76,8 @@ var BoardClient = (function($) {
     function updateItem(data) {
         if (!data) return;
         console.log(data);
-        if (!(data._id in board)) {
-            board[data._id] = $("<div></div>")
+        if (!(data._id in items)) {
+            items[data._id] = $("<div></div>")
                               .attr('id', data._id)
                               .addClass('item')
                               .appendTo(board_elem)
@@ -93,13 +87,33 @@ var BoardClient = (function($) {
                                           drag: dragX,
                                           stop: stopDrag})
         }
-        board[data._id].css({top: data.y, left: data.x})
-                      .html(data.text)
+        items[data._id].css({top: data.y, left: data.x})
+                       .data('modified', data.modified)
+                      .text(data.text);
         if (data.lock) {
-            board[data._id].addClass('locked');
+            items[data._id].addClass('locked');
         } else {
-            board[data._id].removeClass('locked');
+            items[data._id].removeClass('locked');
         }
+
+        var toSort = []
+          , index = 0;
+        console.log('items');
+        console.log(items);
+        for (item in items) {
+            if (items.hasOwnProperty(item)) {
+                toSort[index] = items[item];
+                index++;
+            }
+        }
+        console.log(toSort);
+        toSort.sort(function(a, b) {
+            return a.data('modified') - b.data('modified');
+        });
+        console.log(toSort);
+        $(toSort).each(function(i) {
+            $(this).css('zIndex', 1 + i);
+        });
 
     }
 
@@ -108,12 +122,10 @@ var BoardClient = (function($) {
         
         board = data;
         window.location.hash = "#" + data._id;
-        
         board_elem.width(data.width);
         board_elem.height(data.height);
-        console.log(data.items);
-        for (i = 0; i < data.items.length; i++) {
-            updateItem(data.items[i]);
+        for (var item = 0; item < data.items.length; item++) {
+            updateItem(data.items[item]);
         }
     }
 

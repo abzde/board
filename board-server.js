@@ -17,7 +17,8 @@ var express = require('express')
       y: Number, 
       text: String, 
       lock: String, 
-      board: { type: mongoose.Schema.Types.ObjectId, ref: 'Board' }
+      board: { type: mongoose.Schema.Types.ObjectId, ref: 'Board' },
+      modified: { type: Number, default: Date.now }
   }
   , Board
   , Item;
@@ -48,10 +49,16 @@ function inRoom(socket) {
     return false;
 }
 
+function doCallback(callback, response) {
+    if (typeof callback === "function") {
+        callback(response);
+    }
+}
+
 io.sockets.on('connection', function (socket) {
     
     socket.on('mkboard', function(fn) {
-        if (inRoom(socket)) return fn && fn(false);
+        if (inRoom(socket)) return doCallback(fn, false);
 
         var board = new Board({
             creator: socket.id,
@@ -60,38 +67,41 @@ io.sockets.on('connection', function (socket) {
         });
         board.save();
         socket.join('board:' + board._id);
-        fn && fn(board.toJSON()); 
+        doCallback(fn, board.toJSON());
     });
         
     socket.on('join', function (id, fn) {
-        if (inRoom(socket)) return fn && fn(false);
-        if (!id) return fn && fn(false);
+        if (inRoom(socket)) return doCallback(fn, false);
+        if (!id) return doCallback(fn, false);
         
         Board.findOne({_id: id}).populate('items').exec(function (err, board) {
             if (err) throw err;
-
+            
             if (board) {
                 socket.join('board:' + board._id);
-                fn && fn(board.toJSON());
+                console.log(board);
+                doCallback(fn, board.toJSON());
             } else {
-                fn && fn(false);
+                doCallback(fn, false);
             }
         });
     });
 
     socket.on('add', function(data, fn) {
-        if (!data) return fn && fn(false);
-        Board.findOne({_id: data.board}, function (err, board) {
-            if (err ) throw err;
+        if (!data || !data.item) return doCallback(fn, false);
 
-            if (!board) return fn && fn(false);
+        Board.findOne({_id: data.board}, function (err, board) {
+            if (err) throw err;
+
+            if (!board) return doCallback(fn, false);
             
             if (board.creator == socket.id || !(board.creator in socket.manager.connected)) {
                 var item = new Item({
                     x: 0,
                     y: 0,
                     text: data.item,
-                    board: data.board
+                    board: data.board,
+                    modified: Date.now()
                 });
                 item.save()
                 board.items.push(item);
@@ -99,32 +109,35 @@ io.sockets.on('connection', function (socket) {
                 
                 var json = item.toJSON()
                 
-                fn && fn(json);
+                doCallback(fn, json);
                 socket.broadcast.to('board:' + board._id).emit('update', json);
             } else {
-                fn && fn(false);
+                doCallback(fn, false);
             }
         });
     });
 
     socket.on('lock', function (id, fn) {
-        if (!id) return fn && fn(false);
+        if (!id) return doCallback(fn, false);
+        
         Item.findOne({_id: id})
             .select('lock board')
             .exec(function (err, item) {
                 if (err) throw err;
                 
+                if (!item) return doCallback(fn, false);
+
                 if (!('/board:' + item.board in io.sockets.manager.roomClients[socket.id])) 
-                    return fn && fn(false);
+                    return doCallback(fn, false);
                 
                 if (!item.lock || !(item.lock in socket.manager.connected)) {
                     Item.update({_id: id}, {lock: socket.id}, function (err, num, raw) {
                         if (err) throw err;
                         socket.broadcast.to('board:' + item.board).emit('lock', id);
-                        fn && fn(true);
+                        doCallback(fn, true);
                     });
                 } else {
-                    fn && fn(false);
+                    doCallback(fn, false);
                 }
             });
     });
@@ -140,19 +153,21 @@ io.sockets.on('connection', function (socket) {
                     item.x = data.x;
                     item.y = data.y;
                     item.lock = '';
+                    item.modified = Date.now();
                     item.save();
                     
                     var json = item.toJSON();
 
                     socket.broadcast.to('board:' + item.board)
                                  .emit('update', item.toJSON());
-                    fn && fn(json);
+                    doCallback(fn, json);
                 } else {
-                    fn && fn(item.toJSON());
+                    doCallback(fn, item.toJSON());
                 }
             } else {
-                fn && fn(false);
+                doCallback(fn, false);
             }
         });
     });
+
 });

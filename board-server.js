@@ -1,10 +1,8 @@
 var express = require('express')
   , app = express()
-  , redis = require('redis')
-  , redisClient = redis.createClient()
   , mongoose = require('mongoose').connect('mongodb://localhost/board')
   , db = mongoose.connection
-  , server = require('http').createServer(app).listen(5881)
+  , server = require('http').createServer(app).listen(5880)
   , io = require('socket.io').listen(server)
   , fs = require('fs')
   , boards = {}

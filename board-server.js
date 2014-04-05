@@ -7,6 +7,7 @@ var express = require('express')
   , fs = require('fs')
   , boards = {}
   , boardSchema = {
+      name: String,
       creator: String, 
       width: Number, 
       height: Number, 
@@ -55,6 +56,22 @@ function doCallback(callback, response) {
     }
 }
 
+function genName(callback, cur) {
+    var possible = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      , cur = cur || '';
+
+    Board.count({ name: cur }, function (err, count) {
+        if (err) throw err;
+
+        if (count == 0 && cur) {
+            doCallback(callback, cur);
+        } else {
+            cur += possible.charAt(Math.floor(Math.random() * possible.length))
+            genName(callback, cur);
+        }
+    });
+}
+
 io.sockets.on('connection', function (socket) {
     
     socket.on('mkboard', function(fn) {
@@ -70,11 +87,11 @@ io.sockets.on('connection', function (socket) {
         doCallback(fn, board.toJSON());
     });
         
-    socket.on('join', function (id, fn) {
+    socket.on('join', function (data, fn) {
         if (inRoom(socket)) return doCallback(fn, false);
-        if (!id) return doCallback(fn, false);
+        if (!data) return doCallback(fn, false);
         
-        Board.findOne({_id: id}).populate('items').exec(function (err, board) {
+        Board.findOne({name: data.name || ''}).populate('items').exec(function (err, board) {
             if (err) throw err;
             
             if (board) {
@@ -82,9 +99,32 @@ io.sockets.on('connection', function (socket) {
                 console.log(board);
                 doCallback(fn, board.toJSON());
             } else {
-                doCallback(fn, false);
+                genName(function(name) { 
+                    var board = new Board({
+                        name: name,
+                        creator: socket.id,
+                        height: data.height || 500,
+                        width: data.width || 500
+                    });
+                        
+                    board.save();
+                    socket.join('board:' + board._id);
+
+                    doCallback(fn, board.toJSON());
+                }, data.name || '');
             }
         });
+    });
+
+    socket.on('leave', function (data, fn) {
+        if(!data || !data.id) return doCallback(fn, false);
+
+        if ('/board:' + data.id in io.sockets.manager.roomClients[socket.id]) {
+            socket.leave('/board:' + data.id);
+            doCallback(fn, true);
+        } else {
+            doCallback(fn, false);
+        }
     });
 
     socket.on('add', function(data, fn) {

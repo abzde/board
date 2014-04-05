@@ -2,14 +2,17 @@ var BoardClient = (function($) {
     var socket = io.connect()
       , board = {}
       , items = {}
-      , board_elem
-      , status_elem;
+      , boardElem
+      , statusElem;
 
+    
     socket.on('lock', function(id) {
         items[id].addClass('locked');
         resetItem(items[id]);
     }).on('update', function(data) {
         updateItem(data);
+    }).on('connect', function() {
+        checkHash();
     });
 /*    .on('plusone', function() { 
         board.connected++;
@@ -44,52 +47,55 @@ var BoardClient = (function($) {
         elem = this;
         position = $(this).position();
         $(this).removeClass('active');
-        socket.emit('move', { id: this.id, x: position.left, y: position.top }, function(ret) {
-            if(ret) {
-                updateItem(ret);
-            } else {
-                updateItem(ret);
-            }
-        });
+        socket.emit('move', { id: this.id, x: position.left, y: position.top }, updateItem);
     }
 
+    function checkHash() {
+        var currentBoard = location.hash.replace( /^#/, '') || '';
+        if (currentBoard) {
+            console.log('joining board ' + currentBoard);
+            socket.emit('join', 
+                    { name: currentBoard },
+                    updateBoard);
+        } else {
+            console.log('making board');
+            socket.emit('join', {}, updateBoard);
+        }
+    }
+    
     function init() {
-        status_elem = $("<div></div>")
+        statusElem = $("<div></div>")
                        .attr('id', 'status')
                        .appendTo(document.body);
 
-        board_elem = $("<div></div>")
+        boardElem = $("<div></div>")
                       .attr('id', 'board')
                       .appendTo(document.body);
 
-        if (window.location.hash) {
-            board = window.location.hash;
-            board = board.substr(1, board.length-1);
-            socket.emit('join', 
-                    board,
-                    updateBoard);
-        } else {
-            socket.emit('mkboard', updateBoard);
-        }
+        $(window).on('hashchange', function(e) {
+            checkHash();
+        });
     }
 
     function updateItem(data) {
         if (!data) return;
-        console.log(data);
+        
         if (!(data._id in items)) {
             items[data._id] = $("<div></div>")
                               .attr('id', data._id)
                               .addClass('item')
-                              .appendTo(board_elem)
+                              .appendTo(boardElem)
                               .draggable({containment: 'parent',
                                           stack: '#board div',
                                           start: startDrag,
                                           drag: dragX,
                                           stop: stopDrag})
         }
+        
         items[data._id].css({top: data.y, left: data.x})
                        .data('modified', data.modified)
-                      .text(data.text);
+                       .text(data.text);
+
         if (data.lock) {
             items[data._id].addClass('locked');
         } else {
@@ -98,19 +104,17 @@ var BoardClient = (function($) {
 
         var toSort = []
           , index = 0;
-        console.log('items');
-        console.log(items);
         for (item in items) {
             if (items.hasOwnProperty(item)) {
                 toSort[index] = items[item];
                 index++;
             }
         }
-        console.log(toSort);
+        
         toSort.sort(function(a, b) {
             return a.data('modified') - b.data('modified');
         });
-        console.log(toSort);
+        
         $(toSort).each(function(i) {
             $(this).css('zIndex', 1 + i);
         });
@@ -121,9 +125,10 @@ var BoardClient = (function($) {
         if (!data) return;
         
         board = data;
-        window.location.hash = "#" + data._id;
-        board_elem.width(data.width);
-        board_elem.height(data.height);
+        window.location.hash = "#" + data.name;
+        boardElem.width(data.width);
+        boardElem.height(data.height);
+
         for (var item = 0; item < data.items.length; item++) {
             updateItem(data.items[item]);
         }

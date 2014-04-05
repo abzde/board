@@ -1,15 +1,17 @@
-var BoardClient = (function($) {
+var boardClient = (function($) {
     var socket = io.connect()
       , board = {}
       , items = {}
       , boardElem
-      , statusElem;
+      , statusElem
+      , lastDrag = 0;
 
     
-    socket.on('lock', function(id) {
-        items[id].addClass('locked');
-        resetItem(items[id]);
+    socket.on('lock', function(data) {
+        items[data.id].addClass('locked');
     }).on('update', function(data) {
+        console.log('update');
+        console.log(data);
         updateItem(data);
     }).on('connect', function() {
         checkHash();
@@ -26,23 +28,25 @@ var BoardClient = (function($) {
         socket.emit('add', { board: board._id, item: item }, updateItem);
     }
 
-    function resetItem(item) { 
-        item.draggable('option', 'revert', true)
-            .trigger('mouseup')
-            .draggable('option', 'revert', false);
-    }
-    
     function startDrag() {
         elem = this;
-        socket.emit('lock', this.id, function(ret) { 
+        socket.emit('lock', { id: this.id }, function(ret) { 
             if (ret) { 
                 $(elem).addClass('active'); 
+                lastDrag = Date.now();
             } else {
                 resetItem($(elem));
             }
         });
     }
-    function dragX() {}
+    function dragX() {
+        if (Date.now() > lastDrag + 100) {
+            var position = $(this).position();
+            socket.emit('drag', { id: this.id, x: position.left, y: position.top });
+            lastDrag = Date.now();
+        }
+    }
+
     function stopDrag() {
         elem = this;
         position = $(this).position();
@@ -85,6 +89,7 @@ var BoardClient = (function($) {
                               .attr('id', data._id)
                               .addClass('item')
                               .appendTo(boardElem)
+                              .css({ top: data.y, left:data.x })
                               .draggable({containment: 'parent',
                                           stack: '#board div',
                                           start: startDrag,
@@ -92,7 +97,7 @@ var BoardClient = (function($) {
                                           stop: stopDrag})
         }
         
-        items[data._id].css({top: data.y, left: data.x})
+        items[data._id].animate({ top: data.y, left: data.x }, { duration: 100 })
                        .data('modified', data.modified)
                        .text(data.text);
 
@@ -138,11 +143,13 @@ var BoardClient = (function($) {
     return {
         init: init,
         socket: socket,
-        addItem: addItem
+        addItem: addItem,
+        updateBoard: updateBoard,
+        updateItem: updateItem
     }
 })(jQuery);
 
 $(document).ready(function() {
-    BoardClient.init();
+    boardClient.init();
 });
 

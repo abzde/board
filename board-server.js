@@ -6,6 +6,7 @@ var express = require('express')
   , io = require('socket.io').listen(server)
   , fs = require('fs')
   , boards = {}
+  , cachedItems = {}
   , boardSchema = {
       name: String,
       creator: String, 
@@ -157,10 +158,10 @@ io.sockets.on('connection', function (socket) {
         });
     });
 
-    socket.on('lock', function (id, fn) {
-        if (!id) return doCallback(fn, false);
+    socket.on('lock', function (data, fn) {
+        if (!data || !data.id) return doCallback(fn, false);
         
-        Item.findOne({_id: id})
+        Item.findOne({ _id: data.id })
             .select('lock board')
             .exec(function (err, item) {
                 if (err) throw err;
@@ -171,9 +172,9 @@ io.sockets.on('connection', function (socket) {
                     return doCallback(fn, false);
                 
                 if (!item.lock || !(item.lock in socket.manager.connected)) {
-                    Item.update({_id: id}, {lock: socket.id}, function (err, num, raw) {
+                    Item.update({ _id: data.id }, {lock: socket.id}, function (err, num, raw) {
                         if (err) throw err;
-                        socket.broadcast.to('board:' + item.board).emit('lock', id);
+                        socket.broadcast.to('board:' + item.board).emit('lock', { id: data.id });
                         doCallback(fn, true);
                     });
                 } else {
@@ -182,8 +183,37 @@ io.sockets.on('connection', function (socket) {
             });
     });
 
+    function doDrag(item, x, y) {
+        console.log(item, x, y);
+        if (item && item.lock == socket.id) {
+            item.x = parseInt(x) || item.x;
+            item.y = parseInt(y) || item.y;
+            console.log('broadcasting'); 
+            socket.broadcast.to('board:' + item.board).emit('update', item.toJSON());
+        }
+    }
+
+    socket.on('drag', function(data) {
+        console.log('drag');
+        if (!data || !data.id || !data.x || !data.y) return;
+
+        if (!(data.id in cachedItems)) {
+            Item.findOne({ _id: data.id }, function (err, item) {
+                if (err) throw err; 
+
+                if (item) {
+                    cachedItems[data.id] = item;
+                    doDrag(item, data.x, data.y);
+                }
+            });
+        } else {
+            doDrag(cachedItems[data.id], data.x, data.y);
+        }
+    });
+
+
     socket.on('move', function(data, fn) {
-        if (!data) return;
+        if (!data || !data.id || !data.x || !data.y) return doCallback(fn, false);
 
         Item.findOne({_id: data.id}, function (err, item) {
             if (err) throw err;
@@ -197,7 +227,7 @@ io.sockets.on('connection', function (socket) {
                     item.save();
                     
                     var json = item.toJSON();
-
+                    delete cachedItems[item.id];
                     socket.broadcast.to('board:' + item.board)
                                  .emit('update', item.toJSON());
                     doCallback(fn, json);

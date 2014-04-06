@@ -1,5 +1,5 @@
-body { font-size: 14px; font-family: 'Antic Slab', serif; padding:0; margin:0; }
-#board { position: relative; border:1px solid black; }
+body { font-size: 14px; padding:0; margin:0; }
+#board { position: relative; border:1px solid black; font-family: 'Antic Slab', serif; }
 .item { position: absolute; padding:2px; border:2px solid black; background:#fff; }
 .active { border:2px solid green; }
 .locked { border:2px solid red; }

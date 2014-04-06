@@ -5,7 +5,7 @@ var express = require('express')
   , server = require('http').createServer(app).listen(5880)
   , io = require('socket.io').listen(server)
   , crypto = require('crypto')
-  , boards = {}
+  , boardCounts = {}
   , cachedItems = {}
   , boardSchema = {
       name: String,
@@ -86,8 +86,15 @@ io.sockets.on('connection', function (socket) {
             
             if (board) {
                 socket.join('board:' + board._id);
-                console.log(board);
-                doCallback(fn, board.toJSON());
+                
+                if (!(board._id in boardCounts)) boardCounts[board._id] = 0
+
+                boardCounts[board._id]++;
+                socket.broadcast.to('board:' + board._id).emit('plusone');
+                board = board.toJSON();
+                board['count'] = boardCounts[board._id];
+
+                doCallback(fn, board);
             } else {
                 genName(function(name) {
                     var secret = crypto.randomBytes(10).toString('hex'),
@@ -105,6 +112,9 @@ io.sockets.on('connection', function (socket) {
 
                     ret = board.toJSON();
                     ret['realSecret'] = secret;
+                    
+                    boardCounts[board._id] = 1;
+                    ret['count'] = 1;
                      
                     doCallback(fn, ret);
                 }, data.name || '');
@@ -116,6 +126,8 @@ io.sockets.on('connection', function (socket) {
         if(!data || !data.id) return doCallback(fn, false);
 
         if ('/board:' + data.id in io.sockets.manager.roomClients[socket.id]) {
+            boardCounts[data.id]--;
+            socket.broadcast.to('board:' + data.id).emit('minusone');
             socket.leave('/board:' + data.id);
             doCallback(fn, true);
         } else {
@@ -234,5 +246,16 @@ io.sockets.on('connection', function (socket) {
             }
         });
     });
-
+    
+    socket.on('disconnect', function() {
+        var rooms = io.sockets.manager.roomClients[socket.id];
+        for (room in rooms) {
+            if (rooms.hasOwnProperty(room) && room != '') {
+                console.log
+                boardCounts[room.replace( /^\/board:/, '')]--;
+                console.log(room);
+                io.sockets.in(room.replace( /^\//, '')).emit('minusone');
+            }
+        }
+    });
 });

@@ -15,14 +15,15 @@ var boardClient = (function($) {
         updateItem(data);
     }).on('connect', function() {
         checkHash();
-    });
-/*    .on('plusone', function() { 
-        board.connected++;
-        status_elem.html('connected: ' + board.connected);
+    }).on('plusone', function() { 
+        board.count++;
+        console.log('++');
+        statusElem.text('connected: ' + board.count);
     }).on('minusone', function() {
-        board.connected--;
-        status_elem.html('connected: ' + board.connected);
-    });*/
+        board.count--;
+        console.log('--');
+        statusElem.html('connected: ' + board.count);
+    });
   
     function addItem(item, secret) {
         socket.emit('add', { board: board._id, item: item, secret: secret }, updateItem);
@@ -134,12 +135,17 @@ var boardClient = (function($) {
         window.location.hash = "#" + data.name;
         boardElem.width(data.width);
         boardElem.height(data.height);
+        statusElem.text('connected: ' + board.count);
 
         if (board.realSecret) {
             $("#addSecret").val(board.realSecret);
         }
 
-        items = {};
+        for (item in items) {
+            if (items.hasOwnProperty(item)) {
+                items[item].remove();
+            }
+        }
         for (var item = 0; item < data.items.length; item++) {
             updateItem(data.items[item]);
         }

@@ -24,8 +24,8 @@ var boardClient = (function($) {
         status_elem.html('connected: ' + board.connected);
     });*/
   
-    function addItem(item) {
-        socket.emit('add', { board: board._id, item: item }, updateItem);
+    function addItem(item, secret) {
+        socket.emit('add', { board: board._id, item: item, secret: secret }, updateItem);
     }
 
     function startDrag() {
@@ -68,16 +68,16 @@ var boardClient = (function($) {
     }
     
     function init() {
-        statusElem = $("<div></div>")
-                       .attr('id', 'status')
-                       .appendTo(document.body);
-
-        boardElem = $("<div></div>")
-                      .attr('id', 'board')
-                      .appendTo(document.body);
+        statusElem = $("#status");
+        
+        boardElem = $("#board");
 
         $(window).on('hashchange', function(e) {
             checkHash();
+        });
+
+        $("#addBtn").on('click', function() {
+            addItem($("#addText").val(), $("#addSecret").val());
         });
     }
 
@@ -130,10 +130,16 @@ var boardClient = (function($) {
         if (!data) return;
         
         board = data;
+        console.log(board);
         window.location.hash = "#" + data.name;
         boardElem.width(data.width);
         boardElem.height(data.height);
 
+        if (board.realSecret) {
+            $("#addSecret").val(board.realSecret);
+        }
+
+        items = {};
         for (var item = 0; item < data.items.length; item++) {
             updateItem(data.items[item]);
         }

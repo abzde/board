@@ -9,6 +9,7 @@
     "dependencies": {
         "express": "3.5.1",
         "mongoose": "3.8.8",
-        "socket.io": "0.9.16"
+        "socket.io": "0.9.16",
+        "crypto": "0.0.3"
     }
 }

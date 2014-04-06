@@ -4,11 +4,12 @@ var express = require('express')
   , db = mongoose.connection
   , server = require('http').createServer(app).listen(5880)
   , io = require('socket.io').listen(server)
-  , fs = require('fs')
+  , crypto = require('crypto')
   , boards = {}
   , cachedItems = {}
   , boardSchema = {
       name: String,
+      secret: String,
       creator: String, 
       width: Number, 
       height: Number, 
@@ -75,18 +76,6 @@ function genName(callback, cur) {
 
 io.sockets.on('connection', function (socket) {
     
-    socket.on('mkboard', function(fn) {
-        if (inRoom(socket)) return doCallback(fn, false);
-
-        var board = new Board({
-            creator: socket.id,
-            width: 500,
-            height: 500,
-        });
-        board.save();
-        socket.join('board:' + board._id);
-        doCallback(fn, board.toJSON());
-    });
         
     socket.on('join', function (data, fn) {
         if (inRoom(socket)) return doCallback(fn, false);
@@ -100,18 +89,24 @@ io.sockets.on('connection', function (socket) {
                 console.log(board);
                 doCallback(fn, board.toJSON());
             } else {
-                genName(function(name) { 
-                    var board = new Board({
-                        name: name,
-                        creator: socket.id,
-                        height: data.height || 500,
-                        width: data.width || 500
-                    });
+                genName(function(name) {
+                    var secret = crypto.randomBytes(10).toString('hex'),
+                        board = new Board({
+                            name: name,
+                            creator: socket.id,
+                            secret: crypto.createHash('sha1').update(secret).digest('hex'),
+                            height: data.height || 500,
+                            width: data.width || 500
+                        }),
+                        ret;
                         
                     board.save();
                     socket.join('board:' + board._id);
 
-                    doCallback(fn, board.toJSON());
+                    ret = board.toJSON();
+                    ret['realSecret'] = secret;
+                     
+                    doCallback(fn, ret);
                 }, data.name || '');
             }
         });
@@ -129,14 +124,14 @@ io.sockets.on('connection', function (socket) {
     });
 
     socket.on('add', function(data, fn) {
-        if (!data || !data.item) return doCallback(fn, false);
+        if (!data || !data.item || !data.secret) return doCallback(fn, false);
 
         Board.findOne({_id: data.board}, function (err, board) {
             if (err) throw err;
 
             if (!board) return doCallback(fn, false);
-            
-            if (board.creator == socket.id || !(board.creator in socket.manager.connected)) {
+            console.log(board);
+            if (board.secret == crypto.createHash('sha1').update(data.secret).digest('hex')) {
                 var item = new Item({
                     x: 0,
                     y: 0,
